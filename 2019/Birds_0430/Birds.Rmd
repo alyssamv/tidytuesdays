@@ -1,0 +1,98 @@
+---
+title: "Birds"
+author: "Alyssa Vanderbeek"
+date: "4/30/2019"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+
+bird_collisions <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/bird_collisions.csv")
+mp_light <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/mp_light.csv")
+```
+
+
+## Descriptive analysis
+
+```{r}
+mp_collisions = bird_collisions %>%
+  filter(locality == "MP") %>%
+  dplyr::left_join(mp_light, ., "date") %>%
+  mutate(month = as.integer(format(date, '%m')))
+
+
+mp_collisions %>%
+  mutate(year = as.numeric(format(date, '%Y'))) %>%
+  na.omit(habitat) %>%
+  group_by(year, flight_call, habitat) %>%
+  mutate(count = n()) %>%
+  ggplot(aes(x = year, y = count, color = flight_call)) +
+  geom_point() + 
+  facet_grid(. ~ habitat) + 
+  geom_smooth() 
+
+mp_collisions %>%
+  mutate(year = as.numeric(format(date, '%Y'))) %>%
+  na.omit(habitat) %>%
+  filter(family %in% c("Passerellidae", "Parulidae", "Turdidae")) %>%
+  group_by(year, stratum, family) %>%
+  mutate(count = n()) %>%
+  ggplot(aes(x = year, y = count, color = family)) +
+  geom_point() + 
+  viridis::scale_fill_viridis(discrete = T) + 
+  geom_smooth()
+
+# relationship between number of lights over time (years). It looks like the average number of lights on at McCormick Place over night decrease over time. This reflects the trend in number of collisions over the years, which also decrease, on average.
+mp_collisions %>%
+  mutate(year = as.numeric(format(date, '%Y'))) %>%
+  group_by(year, light_score) %>%
+  mutate(count = n()) %>%
+  ggplot(aes(x = year, y = light_score, size = count)) +
+  geom_point() + 
+  geom_smooth()
+```
+
+It looks like if habitat is unknown, then whether the bird has a flight call or not is also unknown (or vice versa). 
+
+Paridulae has a notable number of species of birds that fly in both upper and lower strata. 
+
+
+
+```{r}
+mp_collisions %>%
+  filter(flight_call %in% c("Yes", "No")) %>%
+  group_by(month, light_score) %>%
+  mutate(count = n()) %>%
+  ggplot(aes(x = month, y = light_score, fill = count)) + 
+  geom_tile() +
+  facet_grid(stratum ~ habitat) + 
+  labs(
+    title = "When do birds collide into buildings most often?",
+    x = "Month of year",
+    y = "Number of lights on at McCormick Place",
+    fill = "Number of collisions"
+  ) + 
+  theme(legend.position = "bottom")
+
+mp_collisions %>%
+  filter(flight_call %in% c("Yes", "No")) %>%
+  filter(family %in% c("Passerellidae", "Parulidae", "Turdidae")) %>%
+  mutate(year = as.numeric(format(date, '%Y'))) %>%
+  group_by(year, light_score) %>%
+  mutate(count = n()) %>%
+  ggplot(aes(x = year, y = light_score, fill = count)) + 
+  geom_tile() +
+  facet_wrap(. ~ family) + 
+  labs(
+    title = "When do birds collide into buildings most often?",
+    x = "Month of year",
+    y = "Number of lights on at McCormick Place",
+    fill = "Number of collisions"
+  ) + 
+  theme(legend.position = "bottom")
+```
+
