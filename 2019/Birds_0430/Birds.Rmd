@@ -6,13 +6,16 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = F)
 
 library(tidyverse)
 library(lubridate)
+library(ggExtra)
 
 bird_collisions <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/bird_collisions.csv")
 mp_light <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/mp_light.csv")
+
+theme_set(theme_bw())
 ```
 
 
@@ -23,8 +26,15 @@ mp_collisions = bird_collisions %>%
   filter(locality == "MP") %>%
   dplyr::left_join(mp_light, ., "date") %>%
   mutate(month = as.integer(format(date, '%m')))
+```
 
+A couple of things I noticed in looking at the data: it seems that if habitat is unknown, then whether the bird has a flight call or not is also unknown (or vice versa). Paridulae has a notable number of species of birds that fly in both upper and lower strata. Most of the birds recorded as having collided are of the Passerellidae family (followed by Parulidae and Turdidae). 
 
+## Collision, flight call, and habitat
+
+Below I looked at the relationship between collision, whether the bird is known to have a flight call, and what habitat the bird resides in. Birds with a flight call are found to have more collisions, with birds residing in or near a forest colliding more often than birds that reside in the open. Between 2000-2018, the number of collisions decrease on average. This downward trend holds also for birds in the Passerellidae family, but collisions in the Parulidae and Turdidae are more stagnant, albeit lower, over time. 
+
+```{r}
 mp_collisions %>%
   mutate(year = as.numeric(format(date, '%Y'))) %>%
   na.omit(habitat) %>%
@@ -45,21 +55,46 @@ mp_collisions %>%
   geom_point() + 
   viridis::scale_fill_viridis(discrete = T) + 
   geom_smooth()
+```
 
-# relationship between number of lights over time (years). It looks like the average number of lights on at McCormick Place over night decrease over time. This reflects the trend in number of collisions over the years, which also decrease, on average.
-mp_collisions %>%
+
+##What's the relationship between the number of lights on in McCormick Place and the number of collisions in a given night? 
+
+I looked at this trend over time. Interestingly, the more lights on in the building, the more collisions seen. The decreasing trend in the number of lights over time also reflects the trend we saw in the number of collisions recorded over time. 
+
+```{r}
+g = mp_collisions %>%
   mutate(year = as.numeric(format(date, '%Y'))) %>%
   group_by(year, light_score) %>%
   mutate(count = n()) %>%
   ggplot(aes(x = year, y = light_score, size = count)) +
-  geom_point() + 
-  geom_smooth()
+  geom_point(aes(color = "#dad4d8")) + 
+  scale_size_continuous(range = c(2, 12)) +
+  geom_smooth(method = 'gam',
+              formula = y ~ splines::bs(x, degree = 5),
+              color = "black") +
+  labs(
+    title = "\nAre lights blinding the birds?",
+    x = "Year",
+    y = "Number of lights on at McCormick Place",
+    caption = "Twitter: @VanderbeekAM | #TidyTuesday
+    Data source: https://doi.org/10.1098/rspb.2019.0364"
+  ) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 16, face = "bold"),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+ggMarginal(g, 
+           type = "histogram", 
+           fill = "darkgrey", 
+           margins = "x",
+           bins = 20) 
+
 ```
 
-It looks like if habitat is unknown, then whether the bird has a flight call or not is also unknown (or vice versa). 
 
-Paridulae has a notable number of species of birds that fly in both upper and lower strata. 
-
+## But wait, what about time of year?
 
 
 ```{r}
@@ -81,12 +116,14 @@ mp_collisions %>%
 mp_collisions %>%
   filter(flight_call %in% c("Yes", "No")) %>%
   filter(family %in% c("Passerellidae", "Parulidae", "Turdidae")) %>%
-  mutate(year = as.numeric(format(date, '%Y'))) %>%
-  group_by(year, light_score) %>%
+  mutate(year = as.numeric(format(date, '%Y')),
+         month = as.numeric(format(date, '%m')),
+         yr_month = format(date, '%Y%m')) %>%
+  group_by(yr_month, light_score) %>%
   mutate(count = n()) %>%
-  ggplot(aes(x = year, y = light_score, fill = count)) + 
+  ggplot(aes(x = yr_month, y = light_score, fill = count)) + 
   geom_tile() +
-  facet_wrap(. ~ family) + 
+  #facet_wrap(. ~ family) + 
   labs(
     title = "When do birds collide into buildings most often?",
     x = "Month of year",
@@ -95,4 +132,6 @@ mp_collisions %>%
   ) + 
   theme(legend.position = "bottom")
 ```
+
+
 
