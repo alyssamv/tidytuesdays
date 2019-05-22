@@ -1,0 +1,104 @@
+---
+title: "GlobaPlasticWaste"
+author: "Alyssa Vanderbeek"
+date: "5/21/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(countrycode)
+library(ggplot2)
+library(ggalt)
+library(ggthemes)
+library(lubridate)
+library(viridis)
+library(ggpubr)
+```
+
+```{r}
+coast_vs_waste <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-21/coastal-population-vs-mismanaged-plastic.csv") %>%
+  janitor::clean_names() %>%
+  filter(year == 2010)
+
+mismanaged_vs_gdp <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-21/per-capita-mismanaged-plastic-waste-vs-gdp-per-capita.csv") %>%
+  purrr::set_names(c("entity", "code", "year", "per_capita_waste", "gdp_per_capita", "total_pop")) %>%
+  filter(year == 2010) %>%
+  dplyr::select(entity, per_capita_waste, gdp_per_capita)
+
+waste_vs_gdp <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-21/per-capita-plastic-waste-vs-gdp-per-capita.csv") %>%
+  purrr::set_names(c("entity", "code", "year", "per_capita_plastic", "gdp_per_capita", "total_pop")) %>%
+  filter(year == 2010) %>%
+  dplyr::select(entity, per_capita_plastic)
+
+codes <- codelist %>%
+  select(iso3c, country.name.en, region, continent) %>%
+  janitor::clean_names() %>%
+  filter(!is.na(continent)) %>%
+  filter(!is.na(region)) %>%
+  left_join(CoordinateCleaner::countryref %>% 
+              select(iso3, capital.lon, capital.lat), by = c("iso3c" = "iso3")) %>%
+  distinct() %>%
+  filter(!is.na(capital.lon)) %>%
+  filter(!is.na(capital.lat))
+
+waste <- coast_vs_waste %>%
+  left_join(mismanaged_vs_gdp, by = "entity") %>%
+  left_join(waste_vs_gdp, by = "entity") %>%
+  left_join(codes %>%
+              dplyr::select(country_name_en, capital.lon, capital.lat), by = c("entity" = "country_name_en")) %>%
+  mutate(entity = recode(entity,
+                         "United Kingdom" = "UK",
+                         "United States" = "USA",
+                         "Trinidad & Tobago" = "Trinidad",
+                         "Cote d'Ivoire" = "Ivory Coast",
+                         "Democratic Republic of Congo" = "Democratic Republic of the Congo",
+                         "Congo" = "Republic of Congo",
+                         "Hong Kong" = "China",
+                         "British Virgin Islands" = "Virgin Islands",
+                         "Saint Vincent and the Grenadines" = "Saint Vincent"))
+```
+
+
+```{r}
+world <- ggplot2::map_data("world") %>%
+  filter(region != "Antarctica") %>%
+  left_join(waste, by = c("region" = "entity"))
+
+world %>%
+  left_join(waste, by = c("region" = "entity")) %>% 
+  ggplot() +
+  geom_cartogram(
+    map = world,
+    aes(x = long, y = lat, map_id = region, fill = per_capita_waste)#,color = "black", size = 0.125
+  ) + 
+  viridis::scale_fill_viridis(discrete = F)
+  scale_fill_manual(name = "Mismanaged waste per capita", 
+                  breaks = c("0.05", "0.10", "0.15", "0.20", "0.25", "0.3"), 
+                  labels = c("0.05", "0.10", "0.15", "0.20", "0.25", "0.3"))
+  
+  
+  geom_point(
+    data = waste, aes(capital.lon, capital.lat, fill = per_capita_waste, size = per_capita_waste), fill = "orange", shape = 21, alpha = 0.8, stroke = 0.25
+  ) + 
+  scale_size_area(name = "Mismanaged waste per capita", 
+                  breaks = c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3), 
+                  max_size = 10, 
+                  labels = c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3)) +
+  labs(
+    x = NULL, y = NULL,
+    title = "Mismanaged waste",
+    subtitle = ""
+    caption = "Source: Our World in Data"
+    ) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom")
+  coord_proj("+proj=robin")
+    
+
+```
+
