@@ -68,8 +68,7 @@ world <- ggplot2::map_data("world") %>%
   left_join(waste, by = c("region" = "entity"))
 
 world %>%
-  mutate(percap_waste_cat = cut(mismanaged_waste_percap,
-                                breaks = c(0, 0.01, 0.025, 0.05, 0.10, 0.30))) %>% # create categorical variable that breaks down the mismanaged waste per cap into discrete intervals
+  mutate(percap_waste_cat = cut(mismanaged_waste_percap,breaks = c(0, 0.01, 0.025, 0.05, 0.10, 0.30))) %>% # create categorical variable that breaks down the mismanaged waste per cap into discrete intervals
   ggplot() + 
   geom_cartogram(
     map = world,
@@ -88,5 +87,47 @@ world %>%
   theme(plot.subtitle = element_text(hjust = 0.5)) +
   theme(legend.position = "bottom")
 
+# create custom legend using geom_bar
+
+countries = world %>%
+  group_by(region) %>%
+  slice(1) %>% 
+  mutate(percap_waste_cat = cut(mismanaged_waste_percap,
+                                breaks = c(0, 0.01, 0.025, 0.05, 0.10, 0.30)),
+         percap_waste_cat_rev = forcats::fct_rev(percap_waste_cat))
+
+waste_cat_count = countries %>%
+  group_by(percap_waste_cat) %>%
+  summarise(freq = length(percap_waste_cat))
+
+countries %>%
+  left_join(waste_cat_count, by = "percap_waste_cat") %>%
+  ggplot(aes(x = 1, y = percap_waste_cat_rev, fill = percap_waste_cat)) +
+  geom_bar(stat = "identity", width = 0.05) + 
+  viridis::scale_fill_viridis(discrete = T) +
+  scale_x_continuous(limits = c(0.5, 1.5)) +
+  coord_flip() + 
+  theme_void() + 
+  theme(legend.position = "none") +
+  geom_text(stat='count', aes(y=..count..), vjust=-1)
+
+data.frame(breaks = c(rep("0", 4),
+                      rep("0.01", 5),
+                      rep("0.025", 6),
+                      rep("0.05", 10),
+                      rep("0.10", 20),
+                      rep("0.30", 60))) %>% # create categorical variable that breaks down the mismanaged waste per cap into discrete intervals
+  ggplot(aes(x = 1, y = breaks, fill = breaks)) +
+  geom_bar(stat = "identity", width = 0.05) + 
+  #theme_void() + 
+  viridis::scale_fill_viridis(discrete = T) +
+  scale_x_continuous(limits = c(0.5, 1.5))
+
+```
+
+```{r}
+ggplot(world, aes(x = mismanaged_waste_percap, y = gdp_per_capita)) +
+  geom_point() +
+  geom_smooth()
 ```
 
