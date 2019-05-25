@@ -15,9 +15,12 @@ library(ggalt)
 library(ggthemes)
 library(ggpubr)
 library(gridExtra)
+library(ggrepel)
 ```
 
-```{r}
+This week's TidyTuesday dataset looks at global plastic waste disposal in 2010. We also get information about county 2011 GDP, and coastal and total population according to Gapminder. Below, I load in the data and create datasets to work with.
+
+```{r data}
 coast_vs_waste <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-21/coastal-population-vs-mismanaged-plastic.csv") %>%
   janitor::clean_names() %>%
   filter(year == 2010)
@@ -32,23 +35,24 @@ waste_vs_gdp <- readr::read_csv("https://raw.githubusercontent.com/rfordatascien
   filter(year == 2010) %>%
   dplyr::select(entity, per_capita_plastic)
 
+# code taken from https://github.com/meensrinivasan/tidytuesdaysubmissions/blob/master/nobel/nobel.R. Gets 'codelist' dataset from the countrycode package and 
 codes <- codelist %>%
   select(iso3c, country.name.en, region, continent) %>%
   janitor::clean_names() %>%
-  filter(!is.na(continent)) %>%
-  filter(!is.na(region)) %>%
+  filter(!is.na(continent) & !is.na(region)) %>%
   left_join(CoordinateCleaner::countryref %>% 
               select(iso3, capital.lon, capital.lat), by = c("iso3c" = "iso3")) %>%
   distinct() %>%
-  filter(!is.na(capital.lon)) %>%
-  filter(!is.na(capital.lat))
+  filter(!is.na(capital.lon) & !is.na(capital.lat))
 
+# master data set of waste information for 2010 across three datasets
 waste <- coast_vs_waste %>%
   left_join(mismanaged_vs_gdp, by = "entity") %>%
   left_join(waste_vs_gdp, by = "entity") %>%
   left_join(codes %>%
-              dplyr::select(country_name_en, capital.lon, capital.lat), by = c("entity" = "country_name_en")) %>%
-  mutate(entity = recode(entity,
+              dplyr::select(country_name_en, capital.lon, capital.lat), by = c("entity" = "country_name_en")) %>% # left_join only the long/lat of capital city for each country
+  mutate(total_gdp = gdp_per_capita*total_population_gapminder,
+         entity = recode(entity, # recode country names in order to match map data below
                          "United Kingdom" = "UK",
                          "United States" = "USA",
                          "Trinidad & Tobago" = "Trinidad",
@@ -60,8 +64,92 @@ waste <- coast_vs_waste %>%
                          "Saint Vincent and the Grenadines" = "Saint Vincent"))
 ```
 
+Let's take a look at some of the data.
 
 ```{r}
+waste %>%
+  select(-entity, -code, -capital.lon, -capital.lat, -year) %>%
+  skimr::skim()
+```
+
+Based on this summary of selected variables (those related to GDP and waste), it looks like there are at least 50 countries with missing information. Let's see which they are.
+
+```{r}
+waste %>%
+  select(-code, -capital.lon, -capital.lat, -year) %>%
+  filter(is.na(mismanaged_plastic_waste_tonnes) | is.na(mismanaged_waste_percap) | is.na(per_capita_plastic)) %>%
+  select(entity)
+```
+
+So the above countries are missing all information related to all the above areas of interest. I wonder where the countries with missing information fall in terms of GDP and total population. 
+
+```{r}
+
+gdp_quant50 = quantile(waste$total_gdp, na.rm = T)[3]
+pop_quant50 = quantile(waste$total_population_gapminder, na.rm = T)[3]
+
+gdp_vs_pop = waste %>%
+  mutate(missing = ifelse(is.na(mismanaged_plastic_waste_tonnes) | 
+                            is.na(mismanaged_waste_percap) | 
+                            is.na(per_capita_plastic), "Missing", "Available")) %>% 
+#  filter(missing == 1) %>%
+  ggplot( aes(x = total_population_gapminder, y = total_gdp, color = missing)) +
+  geom_point(alpha = 0.8, size = 3) +
+  #scale_color_calc(direction = -1) + # interpret geom_point colors as desired
+  #scale_color_brewer(palette = 'Dark3', direction = -1) +
+  viridis::scale_color_viridis(discrete = T) +
+  #theme_bw() +
+  coord_cartesian(xlim = c(0,25000000), ylim = c(0, 250000000000)) + # zoom in to exclude outliers
+  geom_hline(yintercept = gdp_quant50, linetype = "dashed", size = 0.25) +
+  annotate("text", label = "50th percentile GDP", x = 2.26*10^7, y = gdp_quant50 + 0.5*10^10, size = 3) +
+  labs(
+    x = "Total population, according to Gapminder",
+    y = "Total GDP (2011)",
+    #title = "Which countries are missing data about waste, and how does their wealth compare to that of other countries?",
+    subtitle = "Among countries with available GDP, it seems that most of those with missing data on waste and waste\nmanagement (44/49) have annual GDP of $50 billion or less (50th percentile, designated by dashed line).",
+    color = "Availability of waste data"
+  ) +
+  theme(axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        plot.title = element_text(size = 20),
+        legend.position = "bottom",
+        panel.background = element_rect(fill = 'grey', colour = "black"),
+        plot.background = element_rect(fill = 'white', colour = 'white'))
+#gdp_vs_pop
+
+
+gdp_percap_hist = waste %>%
+  mutate(missing = ifelse(is.na(mismanaged_plastic_waste_tonnes) | 
+                            is.na(mismanaged_waste_percap) | 
+                            is.na(per_capita_plastic), "missing", "available")) %>%
+  ggplot(aes(x = gdp_per_capita, fill = missing)) +
+  geom_histogram(position = "dodge") +
+  viridis::scale_fill_viridis(discrete = T) +
+  labs(
+    x = "GDP per capita",
+    y = "Number of countries",
+    subtitle = "Countries with missing waste and waste management data are skewed more to the left than those with data\navailable; the majority of them have lower GDP per capita.",
+    caption = "Source: Our World in Data \n@VanderbeekAM "
+  ) +
+  #theme_bw() + 
+  theme(axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        plot.title = element_text(size = 20),
+        legend.position = "none",
+        panel.background = element_rect(fill = 'grey', colour = "black"),
+        plot.background = element_rect(fill = 'white', colour = 'white'))
+
+cowplot::plot_grid(gdp_vs_pop, gdp_percap_hist, 
+                   nrow = 2, 
+                   rel_heights = c(2, 1))
+
+ggsave("./2019/GlobalWaste_0521/pop_vs_gdp.png", height = 12, width = 8)
+```
+
+
+
+```{r}
+# map data from ggplot
 world <- ggplot2::map_data("world") %>%
   filter(region != "Antarctica") %>%
   left_join(waste, by = c("region" = "entity"))
@@ -72,6 +160,7 @@ china = world %>%
   slice(1) %>%
   mutate(label = "1st in total mismanaged waste\n1st in population")
 
+# world map
 world %>%
   mutate(percap_waste_cat = cut(mismanaged_waste_percap,breaks = c(0, 0.01, 0.025, 0.05, 0.10, 0.30))) %>% # create categorical variable that breaks down the mismanaged waste per cap into discrete intervals
   ggplot() + 
@@ -159,5 +248,13 @@ ggsave("mismanaged_waste.png", width = 14, height = 8)
 ggplot(world, aes(x = mismanaged_waste_percap, y = gdp_per_capita)) +
   geom_point() +
   geom_smooth()
+
+coast_vs_waste %>%
+  group_by(entity, year) %>%
+  filter(year >= 1970) %>%
+#  filter(!entity %in% c("India", "China")) %>%
+ggplot(aes(x = year, y = total_population_gapminder, group = entity)) +
+  geom_line() 
+  
 ```
 
