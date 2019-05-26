@@ -150,7 +150,7 @@ cowplot::plot_grid(gdp_vs_pop, gdp_percap_hist,
                    rel_heights = c(2, 1),
                    labels = "AUTO")
 
-ggsave("./2019/GlobalWaste_0521/pop_vs_gdp.png", height = 12, width = 8)
+ggsave("./figures/GlobalWaste-pop_vs_gdp.png", height = 12, width = 8)
 ```
 
 This figure also gives us some information about the distribution of population and GDP across the world. There are some outliers in both, with significantly large population and GDP, not shown in the scatter plot (China, India, and the USA).
@@ -312,7 +312,7 @@ world %>%
              aes(x = capital.lon, y = capital.lat, label = label), 
              size = 2.5, nudge_x = 0, nudge_y = -20)
 
-ggsave("./2019/GlobalWaste_0521/pct_global_mismanaged_waste.png", width = 14, height = 8)
+ggsave("./figures/GlobalWaste-pct_global_mismanaged_waste.png", width = 14, height = 8)
 ```
 
 
@@ -347,6 +347,6 @@ countries %>%
   theme(legend.position = "right",
         plot.title = element_text(size = 15, face = "bold"))
   
-ggsave("./2019/GlobalWaste_0521/country_pct_mismanaged_boxplot.png", width = 10, height = 7)
+ggsave("./figures/GlobalWaste-country_pct_mismanaged_boxplot.png", width = 10, height = 7)
 ```
 
