@@ -21,6 +21,18 @@ library(GGally)
 ```{r}
 wine_ratings <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-28/winemag-data-130k-v2.csv") %>%
   select(-1)
+
+# number of wines by country
+n_wines = wine_ratings %>%
+  group_by(country) %>%
+  summarise(n_wines = n()) %>%
+  arrange(desc(n_wines)) %>%
+  mutate(tier = NA)
+
+n_wines$tier[1:3] = 1
+n_wines$tier[4:12] = 2
+n_wines$tier[13:44] = 3
+
 ```
 
 Lots of character variables in this dataset. I want to get an idea for the unique values available.
@@ -49,26 +61,36 @@ prices = wine_ratings %>%
   group_by(country) %>%
   mutate(med_price = median(price, na.rm = T)) %>%
   ungroup() %>%
-  filter(!is.na(med_price)) %>%
-  mutate(country = fct_reorder(country, med_price)) 
+  filter(!is.na(med_price))  %>%
+  left_join(n_wines %>% select(country, tier), by = "country") %>%
+  mutate(country = fct_reorder(country, med_price))
 
 global_median_price = median(prices$med_price)
 
-ggplot(prices, aes(y = log(price), x = country, fill = "grey")) +
+prices %>%
+  filter(country != "NA") %>%
+  ggplot(aes(y = log(price), x = country, fill = "grey")) +
   geom_boxplot() +
   geom_hline(yintercept = log(global_median_price)) +
   scale_fill_identity() +
+  scale_x_discrete()  +
+#  annotate("text", y = 6, x = 30, label = "test") +
+  facet_grid(tier~., scales = "free_y", space = "free_y") +
   theme_bw() +
   labs(
     x = NULL,
     y = "Bottle price (log-scale)",
     title = "The global median price of a bottle of wine is $28.",
-    subtitle = "The distribution of wine price by country is shown below in log-scale.\nNote how the majority of each country's price distribution falls below the global\nmedian, even in log-scale. This suggests highly skewed pricing, which is\nreflected in that out of 130k wines, only a handful cost more than\na few hundred dollars.",
+    subtitle = "The distribution of wine price by country is shown below in log-scale. Note how the\nmajority of each country's price distribution falls below the global median, even in log-scale.\nThis suggests a highly skewed pricing, which is reflected in that out of 130k wines, only a\nhandful cost more than a few hundred dollars. Countries that produce more wine\n(Tiers 1, 2) are most responsible for this skew.",
     caption = "Data Source: WineEnthusiast \nTwitter: @VanderbeekAM "
   ) +
   coord_flip() +
   theme(plot.title = element_text(size = 15, face = "bold"),
-        axis.text.y = element_text(size = 10, face = "bold"))
+        plot.subtitle = element_text(size = 9),
+        axis.text.y = element_text(size = 10, face = "bold"),
+        panel.grid = element_blank())
+
+ggsave("./figures/WineRatings_boxplot_countryprice.png", height = 10, width = 7)
 ```
 
 Price is pretty skewed, so I will either use a log-scale or create a categorical variable with intervals when using price in any analysis/viz.
@@ -77,16 +99,6 @@ Now I want to check how many wines fall into different categories:
 ```{r}
 sort(table(wine_ratings$country)) # this could be displayed as a tree plot
 
-# number of wines by country
-n_wines = wine_ratings %>%
-  group_by(country) %>%
-  summarise(n_wines = n()) %>%
-  arrange(desc(n_wines)) %>%
-  mutate(tier = NA)
-
-n_wines$tier[1:3] = 1
-n_wines$tier[4:12] = 2
-n_wines$tier[13:44] = 3
 
 # viz as treemap
 ggplot(n_wines, aes(area = n_wines, fill = n_wines, label = country,
